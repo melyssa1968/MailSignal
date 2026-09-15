@@ -1,0 +1,3 @@
+import { owner,db,json,fail,hashKey } from '@/lib/server';
+export async function POST(r:Request){try{const uid=await owner(r,true),key=crypto.randomUUID()+crypto.randomUUID();await db().prepare('INSERT INTO preferences(owner,extension_key_hash) VALUES(?,?) ON CONFLICT(owner) DO UPDATE SET extension_key_hash=excluded.extension_key_hash,extension_seen_at=NULL').bind(uid,await hashKey(key)).run();return json({key});}catch(e){return fail(e);}}
+export async function DELETE(r:Request){try{const uid=await owner(r,true);await db().prepare('UPDATE preferences SET extension_key_hash=NULL,extension_seen_at=NULL WHERE owner=?').bind(uid).run();return json({revoked:true});}catch(e){return fail(e);}}

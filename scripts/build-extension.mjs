@@ -1,0 +1,10 @@
+import { build } from 'esbuild';
+import { mkdir,copyFile,writeFile,readFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+const dir='.sites-runtime/extension';await mkdir(dir,{recursive:true});
+await Promise.all(['content','background'].map(name=>build({entryPoints:['extension/'+name+'.src.js'],outfile:dir+'/'+name+'.js',bundle:true,minify:true,platform:'browser',format:'iife',target:['chrome120'],legalComments:'eof'})));
+for(const name of ['manifest.json','options.html','options.js','startup.js'])await copyFile('extension/'+name,dir+'/'+name);
+await copyFile('node_modules/@inboxsdk/core/pageWorld.js',dir+'/pageWorld.js');
+await writeFile(dir+'/INSTALL.txt','MailSignal Gmail extension\n\n1. Unzip this folder.\n2. In desktop Chrome open chrome://extensions, turn Developer mode on, choose Load unpacked, and select this folder.\n3. Open the MailSignal extension icon and enter your dashboard connection key and a registered InboxSDK App ID from https://register.inboxsdk.com/.\n4. Save, then refresh Gmail.\n5. Compose a one-recipient email and use Gmail Send. The Track this email checkbox controls tracking. Recipient domain exclusions are checked by the server at send time. CC/BCC and plain-text emails are skipped.\n\nNo email body is uploaded to MailSignal. SDK modifies the outgoing send request, not draft content. Draft and sender viewing may still affect pixels on other devices. No promise of verified human reads.\n\nDevelopment build: not Chrome Web Store published; live Gmail acceptance testing required.\n');
+execFileSync('python',['-c',"import zipfile,pathlib; p=pathlib.Path('.sites-runtime/extension'); z=zipfile.ZipFile('public/mailsignal-gmail.zip','w',zipfile.ZIP_DEFLATED); [z.write(f,f.name) for f in p.iterdir() if f.is_file()]; z.close()"]);
+console.log('Built public/mailsignal-gmail.zip with bundled InboxSDK and no credentials.');

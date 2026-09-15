@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "MailSignal for Gmail",
+  "version": "0.2.2",
+  "description": "Open signals for individual sales emails, with excluded recipient domains.",
+  "minimum_chrome_version": "120",
+  "permissions": [
+    "storage",
+    "scripting",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://mail.google.com/*",
+    "https://mail-signal.melyssa-plunkett.chatgpt.site/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://mail.google.com/*"
+      ],
+      "js": [
+        "startup.js",
+        "content.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "options_page": "options.html",
+  "action": {
+    "default_title": "MailSignal setup"
+  }
+}
