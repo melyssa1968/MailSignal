@@ -10,8 +10,11 @@ export const messages = sqliteTable('messages', {
 }, t => [index('idx_messages_campaign').on(t.campaignId)]);
 export const events = sqliteTable('events', {
  id: text('id').primaryKey(), messageId: text('message_id').notNull().references(()=>messages.id),
- receivedAt: integer('received_at').notNull(), kind: text('kind').notNull(), sourceInfo: text('source_info'),
+ receivedAt: integer('received_at').notNull(), kind: text('kind').notNull(), sourceInfo: text('source_info'), ignoredAt: integer('ignored_at'),
 }, t => [index('idx_events_message_time').on(t.messageId,t.receivedAt)]);
+export const senderViews=sqliteTable('sender_views',{
+ id:text('id').primaryKey(), messageId:text('message_id').notNull().references(()=>messages.id), observedAt:integer('observed_at').notNull(),
+},t=>[index('idx_sender_views_message_time').on(t.messageId,t.observedAt)]);
 export const preferences = sqliteTable('preferences', {
  owner: text('owner').primaryKey(), excludedDomains:text('excluded_domains').notNull().default('[]'),
  extensionKeyHash:text('extension_key_hash'), extensionSeenAt:integer('extension_seen_at'),

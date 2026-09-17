@@ -10,6 +10,9 @@ export function requestSource(request: Request, kind: string) {
   network: clean(cf?.asOrganization),
   asn: typeof cf?.asn === 'number' && Number.isSafeInteger(cf.asn) && cf.asn > 0 ? cf.asn : null,
   proxy: kind === 'google_proxy' ? 'Google image proxy (request signature)' : null,
+  client: clean(request.headers.get('user-agent')),
+  purpose: clean(request.headers.get('sec-purpose')||request.headers.get('purpose')),
+  fetchMode: clean(request.headers.get('sec-fetch-mode')),
  };
 }
 export function parseRequestSource(value: string | null) {

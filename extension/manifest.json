@@ -1,13 +1,14 @@
 {
   "manifest_version": 3,
   "name": "MailSignal for Gmail",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Open signals for individual sales emails, with excluded recipient domains.",
   "minimum_chrome_version": "120",
   "permissions": [
     "storage",
     "scripting",
-    "alarms"
+    "alarms",
+    "declarativeNetRequestWithHostAccess"
   ],
   "host_permissions": [
     "https://mail.google.com/*",
@@ -31,5 +32,14 @@
   "options_page": "options.html",
   "action": {
     "default_title": "MailSignal setup"
+  },
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "sender_protection",
+        "enabled": true,
+        "path": "sender-protection.json"
+      }
+    ]
   }
 }

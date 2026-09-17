@@ -9,6 +9,13 @@ export async function POST(r:Request){try{
  const uid=account.owner,i=await jsonInput(r),s=await settingsFor(uid);
  await db().prepare('UPDATE preferences SET extension_seen_at=? WHERE owner=?').bind(Date.now(),uid).run();
  if(i.action==='check')return json({...s,publicReady:publicReady()});
+ if(i.action==='self_view'){
+  const ids=Array.isArray(i.ids)?[...new Set(i.ids)]:[];
+  if(!ids.length||ids.length>50||ids.some(v=>typeof v!=='string'||!/^[a-f0-9-]{36}$/.test(v)))throw new ApiError(400,'Invalid view metadata.');
+  const now=Date.now();
+  for(const id of ids)await db().prepare(`INSERT INTO sender_views(id,message_id,observed_at) SELECT ?,m.id,? FROM messages m JOIN campaigns c ON c.id=m.campaign_id WHERE m.id=? AND c.owner=? AND m.sent_at IS NOT NULL AND NOT EXISTS(SELECT 1 FROM sender_views v WHERE v.message_id=m.id AND v.observed_at>?)`).bind(crypto.randomUUID(),now,id,uid,now-5000).run();
+  return json({ok:true});
+ }
  if(i.action==='prepare'){
   if(!publicReady())throw new ApiError(503,'The tracking endpoint is not active.');
   if(!Array.isArray(i.recipients)||i.recipients.some((x:unknown)=>typeof x!=='string'))throw new ApiError(400,'Recipient metadata is invalid.');

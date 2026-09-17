@@ -1,10 +1,10 @@
 export type Campaign = { id:string; name:string; subject:string; body:string; status:string; created_at:number; recipients:number; sent:number; opens:number; unique_opens:number; automated:number };
 export type SignalEvent = { id:string; email:string; campaign_name:string; campaign_id:string; kind:string; received_at:number };
 export type Snapshot = { campaigns:Campaign[]; activity:SignalEvent[]; chart:{day:string; opens:number; unique_opens:number}[]; totals:{recipients:number;sent:number;opens:number;unique_opens:number;automated:number}; publicReady:boolean; refreshedAt:number };
-export function classifyRequest(ua:string) {
- if (/bot|crawler|spider|scanner|prefetch|headless|barracuda|proofpoint|mimecast/i.test(ua)) return 'automated';
+export function classifyRequest(ua:string, purpose='') {
+ if (/prefetch|prerender/i.test(purpose)||/bot|crawler|spider|scanner|prefetch|headless|barracuda|proofpoint|mimecast|curl|wget|python|node-fetch|undici/i.test(ua)) return 'automated';
  if (/GoogleImageProxy/i.test(ua)) return 'google_proxy';
- return 'unverified';
+ return /Mozilla|AppleWebKit|Outlook|Thunderbird/i.test(ua)?'unverified':'unknown_client';
 }
 export function escapeHtml(s:string) { return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!)); }
 export function recipientList(raw:string) {

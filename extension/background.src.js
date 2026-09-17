@@ -16,6 +16,7 @@ chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
   if(msg.action==='config'){const {appId,key}=await chrome.storage.local.get(['appId','key']);return {appId,configured:!!(appId&&key)};}
   if(msg.action==='sent'&&typeof msg.id==='string'&&/^[a-f0-9-]{36}$/.test(msg.id))return confirm(msg.id);
   if(msg.action==='check')return call({action:'check'});
+  if(msg.action==='self_view')return call({action:'self_view',ids:msg.ids});
   if(msg.action==='prepare')return call({action:'prepare',requestId:msg.requestId,recipients:msg.recipients,sender:msg.sender,subject:msg.subject});
   throw new Error('Unknown request.');
  })().then(reply,e=>reply({error:e.message}));return true;

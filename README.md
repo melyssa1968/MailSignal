@@ -1,6 +1,6 @@
 # MailSignal — personal sales email tracking
 
-Source snapshot of the working MailSignal app, including Gmail extension **0.3.0**.
+Source snapshot of the working MailSignal app, including Gmail extension **0.4.0**.
 
 Live dashboard: https://mail-signal.melyssa-plunkett.chatgpt.site
 
@@ -56,8 +56,12 @@ No real emails were sent during development. No browser/WebMCP runtime testing w
 
 ## Interpreting activity
 
-Requests within 10 seconds of server send confirmation are labeled possible automatic loads, not discarded. Timing alone cannot prove automation; genuine fast opens may receive this label. Later requests are possible opens, never verified reads. Known bot/scanner signatures remain uncertain regardless of timing. The timeline shows each retained request, its source classification, and timing explanation. No activity detected does not mean unread: blocking, proxies, and caching can prevent requests. Sender/internal views cannot reliably be excluded from shared pixels. See `docs/tracking-investigation.md` for investigation evidence and limits.
+The main list counts screened activity sessions, not verified reads. Immediate loads (within 10 seconds), known automation/prefetch, unknown client signatures, bursts across at least three same-owner emails within one second of an event, and possible sender-view overlaps are excluded. New events wait three seconds for burst checks; requests less than 30 seconds apart form one activity session. Filtering runs on reads, so historical bursts are corrected too. The raw timeline retains all requests and explains exclusions. The first/last activity columns use screened activity only. Individual requests can be ignored and restored by the owner.
+
+Sender-view protection in extension 0.4.0 blocks direct MailSignal pixel image loads initiated by Gmail in that browser profile. An additional DOM observer reports tracked message IDs when Gmail renders images, including proxy URLs whose fragments retain the original pixel address; server events within five seconds are marked possible self-views. This cannot prevent server-side Gmail proxy fetching, track another device, or prove that a coincident prospect view was internal. No email body is uploaded. Do not use this same browser profile for an independent recipient acceptance test.
+
+No activity does not mean unread. Later screened image activity still does not establish identity or a human read. These are conservative heuristics, not a proprietary bot-detection service. See `docs/tracking-redesign.md` for the incident, comparison, design, and validation.
 
 ## Request location and network
 
-Open an email’s Activity timeline to see approximate request location, network organization/ASN, and a Google proxy signature when detected. Missing metadata displays Unavailable; older records display Not collected. These fields never identify an email domain or employer. No reverse-DNS lookup, raw IP storage, precise coordinates, or external geolocation service is used. Collection uses only runtime Request.cf metadata, not caller-supplied forwarding/location headers. No extension update is required (0.3.0 remains current).
+Open an email’s Activity timeline to see approximate request location, network organization/ASN, and a Google proxy signature when detected. Missing metadata displays Unavailable; older records display Not collected. These fields never identify an email domain or employer. No reverse-DNS lookup, raw IP storage, precise coordinates, or external geolocation service is used. Collection uses only runtime Request.cf metadata, not caller-supplied forwarding/location headers. Extension 0.4.0 adds sender-view defenses; replace files in the existing installed folder and reload to preserve settings.

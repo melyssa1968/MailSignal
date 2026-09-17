@@ -8,7 +8,24 @@ function stripOurPixels(html){const template=document.createElement('template');
  const cfg=await rpc({action:'config'});if(!cfg.configured){globalThis.mailSignalStartup?.set('Setup incomplete: save your key and App ID in this Chrome profile.');notification('Finish the extension setup to track emails. Gmail sending is unchanged.');return;}
  globalThis.mailSignalStartup?.set('Waiting for InboxSDK to connect to Gmail');
  const sdk=await InboxSDK.load(2,cfg.appId,{eventTracking:false});
- globalThis.mailSignalStartup?.set('Connected to Gmail. Open a new Compose window.');
+  globalThis.mailSignalStartup?.set('Connected to Gmail. Open a new Compose window.');
+ // Best-effort correlation when Gmail renders tracked images in this browser.
+ // The remote image can load before DOM observation; server correlation retains
+ // overlapping events as uncertain instead of claiming recipient engagement.
+ const seenViews=new Map();
+ const scanViews=()=>{
+  const ids=new Set();
+  document.querySelectorAll('img[src]').forEach(img=>{
+   let value=img.getAttribute('src')||'';try{value=decodeURIComponent(value);}catch{}
+   const start=value.indexOf(ORIGIN+'/p/');if(start<0)return;
+   const id=value.slice(start+ORIGIN.length+3).match(/^([a-f0-9-]{36})(?:\.gif)?(?:[?#&]|$)/)?.[1];
+   if(id&&Date.now()-(seenViews.get(id)||0)>60000){ids.add(id);seenViews.set(id,Date.now());}
+  });
+  if(ids.size)rpc({action:'self_view',ids:[...ids].slice(0,50)}).catch(()=>{});
+ };
+ let scanTimer;
+ new MutationObserver(()=>{clearTimeout(scanTimer);scanTimer=setTimeout(scanViews,100);}).observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['src']});
+ scanViews();
  sdk.Compose.registerComposeViewHandler(compose=>{
   globalThis.mailSignalStartup?.set('Compose detected; adding tracking control');
   let enabled=true,trackId=null,requestId=crypto.randomUUID(),fingerprint='',inserted=false,outcome='Tracking was not ready when this email was sent.';

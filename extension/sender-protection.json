@@ -1,0 +1,18 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "||mail-signal.melyssa-plunkett.chatgpt.site/p/",
+      "initiatorDomains": [
+        "mail.google.com"
+      ],
+      "resourceTypes": [
+        "image"
+      ]
+    }
+  }
+]
