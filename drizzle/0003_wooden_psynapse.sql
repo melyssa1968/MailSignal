@@ -1,0 +1,1 @@
+ALTER TABLE `events` ADD `source_info` text;

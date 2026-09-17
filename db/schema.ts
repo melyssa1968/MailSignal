@@ -10,7 +10,7 @@ export const messages = sqliteTable('messages', {
 }, t => [index('idx_messages_campaign').on(t.campaignId)]);
 export const events = sqliteTable('events', {
  id: text('id').primaryKey(), messageId: text('message_id').notNull().references(()=>messages.id),
- receivedAt: integer('received_at').notNull(), kind: text('kind').notNull(),
+ receivedAt: integer('received_at').notNull(), kind: text('kind').notNull(), sourceInfo: text('source_info'),
 }, t => [index('idx_events_message_time').on(t.messageId,t.receivedAt)]);
 export const preferences = sqliteTable('preferences', {
  owner: text('owner').primaryKey(), excludedDomains:text('excluded_domains').notNull().default('[]'),

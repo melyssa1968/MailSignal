@@ -39,7 +39,7 @@ The SDK request modifier appends the pixel to the outgoing send payload, not to 
 
 Per-owner settings store an explicit editable list of excluded recipient domains. Matching is case-insensitive and includes subdomains, with a dot boundary: `example.com` excludes `team.example.com`, but not `notexample.com`. Messages are skipped only when every recipient is excluded or matches the sender. The same eligibility rule suppresses future collection and hides existing records if all recipients become excluded. Historical rows are retained. Exclusions are evaluated on the server for every preparation and pixel load. The exact From address is not an eligible recipient; copying that address does not prevent tracking for other eligible recipients.
 
-These rules do not identify the domain of the person opening a message. Gmail image proxies cannot reliably establish opener identity. Sender views in Sent, forwarding, privacy preloads, or use from another device can still affect counts. Pixels are engagement signals, not read receipts. No IP addresses or inferred locations are stored.
+These rules do not identify the domain of the person opening a message. Gmail image proxies cannot reliably establish opener identity. Sender views in Sent, forwarding, privacy preloads, or use from another device can still affect counts. Pixels are engagement signals, not read receipts. No raw IP addresses are stored. New activity records include approximate request city/region/country and network organization/ASN when supplied by the hosting runtime. These may describe an intermediary, not the viewer.
 
 ## Authentication and activation
 
@@ -57,3 +57,7 @@ No real emails were sent during development. No browser/WebMCP runtime testing w
 ## Interpreting activity
 
 Requests within 10 seconds of server send confirmation are labeled possible automatic loads, not discarded. Timing alone cannot prove automation; genuine fast opens may receive this label. Later requests are possible opens, never verified reads. Known bot/scanner signatures remain uncertain regardless of timing. The timeline shows each retained request, its source classification, and timing explanation. No activity detected does not mean unread: blocking, proxies, and caching can prevent requests. Sender/internal views cannot reliably be excluded from shared pixels. See `docs/tracking-investigation.md` for investigation evidence and limits.
+
+## Request location and network
+
+Open an email’s Activity timeline to see approximate request location, network organization/ASN, and a Google proxy signature when detected. Missing metadata displays Unavailable; older records display Not collected. These fields never identify an email domain or employer. No reverse-DNS lookup, raw IP storage, precise coordinates, or external geolocation service is used. Collection uses only runtime Request.cf metadata, not caller-supplied forwarding/location headers. No extension update is required (0.3.0 remains current).
