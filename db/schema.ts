@@ -6,7 +6,7 @@ export const campaigns = sqliteTable('campaigns', {
 }, t => [index('idx_campaigns_owner').on(t.owner)]);
 export const messages = sqliteTable('messages', {
  id: text('id').primaryKey(), campaignId: text('campaign_id').notNull().references(()=>campaigns.id),
- email: text('email').notNull(), sentAt: integer('sent_at'), sendingAt: integer('sending_at'),
+ email: text('email').notNull(), recipientsJson:text('recipients_json').notNull().default('[]'), sender:text('sender'), sentAt: integer('sent_at'), sendingAt: integer('sending_at'),
 }, t => [index('idx_messages_campaign').on(t.campaignId)]);
 export const events = sqliteTable('events', {
  id: text('id').primaryKey(), messageId: text('message_id').notNull().references(()=>messages.id),

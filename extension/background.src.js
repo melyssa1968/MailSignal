@@ -12,6 +12,7 @@ chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
  const allowed=sender.url?.startsWith('https://mail.google.com/')||sender.url?.startsWith(chrome.runtime.getURL(''));
  if(!allowed){reply({error:'Unrecognized extension caller.'});return;}
  (async()=>{
+  if(msg.action==='outcome'){await chrome.storage.local.set({lastOutcome:{message:String(msg.message).slice(0,350),at:Date.now()}});return {ok:true};}
   if(msg.action==='config'){const {appId,key}=await chrome.storage.local.get(['appId','key']);return {appId,configured:!!(appId&&key)};}
   if(msg.action==='sent'&&typeof msg.id==='string'&&/^[a-f0-9-]{36}$/.test(msg.id))return confirm(msg.id);
   if(msg.action==='check')return call({action:'check'});

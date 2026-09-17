@@ -1,6 +1,6 @@
 # MailSignal — personal sales email tracking
 
-Source snapshot of the working MailSignal app, including Gmail extension **0.2.2**.
+Source snapshot of the working MailSignal app, including Gmail extension **0.3.0**.
 
 Live dashboard: https://mail-signal.melyssa-plunkett.chatgpt.site
 
@@ -27,17 +27,17 @@ Download `public/mailsignal-gmail.zip`, unzip into a permanent folder, and use C
 
 The owner confirmed tracking worked in Gmail on September 15, 2026 after disabling an older duplicate extension. The automated extension tests use a mocked SDK and do not guarantee compatibility with every Gmail layout.
 
-MailSignal now centers on individual messages composed and sent directly in Gmail. The dashboard lists recipient, subject, sent time, observed opens, first detected open, and latest detected open. Campaign data from the first version is retained and presented as individual sent rows; the old sender is no longer the primary UI.
+MailSignal now centers on individual messages composed and sent directly in Gmail. The dashboard lists recipient, subject, sent time, image loads, possible opens, first and latest activity, and an event timeline. Campaign data from the first version is retained and presented as individual sent rows; the old sender is no longer the primary UI.
 
 ## Gmail integration
 
 `extension/` contains a desktop Chrome/Edge Manifest V3 extension using the bundled InboxSDK. `node scripts/build-extension.mjs` builds the downloadable `public/mailsignal-gmail.zip`. Users install it as an unpacked extension, generate a dashboard connection key, and supply their own registered InboxSDK App ID. No fake or shared App ID is included. Installation and a live Gmail acceptance test remain necessary; this is not a Chrome Web Store release.
 
-The SDK request modifier appends the pixel to the outgoing send payload, not to draft DOM or autosaves. Native Gmail owns sending, formatting, attachments, and the sender account. This integration never clicks Send programmatically. The extension transmits only recipient, subject, sender, and tracking identifiers to MailSignal; email bodies are not uploaded to the app. `sent` confirmation is idempotent and retried from the extension for up to 24 hours. If preparation fails, the email sends normally without tracking and the extension reports this. Plain text and multi-recipient messages are skipped.
+The SDK request modifier appends the pixel to the outgoing send payload, not to draft DOM or autosaves. Native Gmail owns sending, formatting, attachments, and the sender account. This integration never clicks Send programmatically. The extension transmits only recipient, subject, sender, and tracking identifiers to MailSignal; email bodies are not uploaded to the app. `sent` confirmation is idempotent and retried from the extension for up to 24 hours. If preparation fails, the email sends normally without tracking and the extension reports this. Plain text messages are skipped. To/CC/BCC messages are supported when at least one recipient is eligible. A shared pixel measures message-level activity and cannot identify which recipient viewed it. Extension options show the latest send result, including skipped tracking or pending confirmation.
 
 ## Domain exclusions
 
-Per-owner settings store an explicit editable list of excluded recipient domains. Matching is case-insensitive and includes subdomains, with a dot boundary: `example.com` excludes `team.example.com`, but not `notexample.com`. Exclusions prevent new tracking, suppress future event collection for existing links, and hide existing records in the main list. Historical rows are retained. Exclusions are evaluated on the server for every preparation and pixel load. Sending to the exact From address is also skipped.
+Per-owner settings store an explicit editable list of excluded recipient domains. Matching is case-insensitive and includes subdomains, with a dot boundary: `example.com` excludes `team.example.com`, but not `notexample.com`. Messages are skipped only when every recipient is excluded or matches the sender. The same eligibility rule suppresses future collection and hides existing records if all recipients become excluded. Historical rows are retained. Exclusions are evaluated on the server for every preparation and pixel load. The exact From address is not an eligible recipient; copying that address does not prevent tracking for other eligible recipients.
 
 These rules do not identify the domain of the person opening a message. Gmail image proxies cannot reliably establish opener identity. Sender views in Sent, forwarding, privacy preloads, or use from another device can still affect counts. Pixels are engagement signals, not read receipts. No IP addresses or inferred locations are stored.
 
@@ -53,3 +53,7 @@ The site audience is public so email image clients and the extension can reach t
 - Use the Sites build and publish workflow with the existing project identity. Applied migrations are immutable; changes append migrations.
 
 No real emails were sent during development. No browser/WebMCP runtime testing was performed in this environment. Local `.env` uses the same keys as `.env.example`; hosted values are managed separately. Do not add real connection keys or credentials to source or the extension download.
+
+## Interpreting activity
+
+Requests within 10 seconds of server send confirmation are labeled possible automatic loads, not discarded. Timing alone cannot prove automation; genuine fast opens may receive this label. Later requests are possible opens, never verified reads. Known bot/scanner signatures remain uncertain regardless of timing. The timeline shows each retained request, its source classification, and timing explanation. No activity detected does not mean unread: blocking, proxies, and caching can prevent requests. Sender/internal views cannot reliably be excluded from shared pixels. See `docs/tracking-investigation.md` for investigation evidence and limits.

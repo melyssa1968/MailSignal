@@ -11,7 +11,8 @@ function stripOurPixels(html){const template=document.createElement('template');
  globalThis.mailSignalStartup?.set('Connected to Gmail. Open a new Compose window.');
  sdk.Compose.registerComposeViewHandler(compose=>{
   globalThis.mailSignalStartup?.set('Compose detected; adding tracking control');
-  let enabled=true,trackId=null,requestId=crypto.randomUUID(),fingerprint='',inserted=false;
+  let enabled=true,trackId=null,requestId=crypto.randomUUID(),fingerprint='',inserted=false,outcome='Tracking was not ready when this email was sent.';
+  const report=message=>{globalThis.mailSignalStartup?.set(message);notification(message);rpc({action:'outcome',message}).catch(()=>{});};
   const bar=compose.addComposeNotice({orderHint:-100});const label=document.createElement('label');const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.checked=true;const text=document.createElement('span');text.textContent=' Track this email · connecting…';label.append(checkbox,text);Object.assign(label.style,{font:'14px Arial',display:'flex',gap:'8px',alignItems:'center',padding:'8px 12px',color:'#183c2e',background:'#eef7f0',border:'1px solid #bfd6c5',borderRadius:'6px',margin:'6px 0'});bar.el.append(label);globalThis.mailSignalStartup?.set('Tracking control created above the message');
   const visibilityTimer=setTimeout(()=>{if(compose.destroyed)return;const rect=checkbox.getBoundingClientRect();const visible=checkbox.isConnected&&rect.width>0&&rect.height>0&&getComputedStyle(checkbox).visibility!=='hidden';globalThis.mailSignalStartup?.set(visible?'Tracking checkbox is displayed above the message':'Compose found, but tracking control has no visible layout');},1000);
   compose.on('destroy',()=>clearTimeout(visibilityTimer));
@@ -21,22 +22,22 @@ function stripOurPixels(html){const template=document.createElement('template');
    await compose.getDraftID();if(compose.destroyed)return;
    compose.registerRequestModifier(async params=>{
     trackId=null;inserted=false;
-    if(params.isPlainText){notification('Plain-text email sent without a pixel.');return params;}
+    if(params.isPlainText){outcome='Not tracked: plain-text email.';return params;}
     // Modify only the outgoing send payload. Never load a pixel in a saved draft.
     const body=stripOurPixels(params.body);
-    if(!enabled)return {body};
+    if(!enabled){outcome='Not tracked: tracking was switched off.';return {body};}
     try{
      const recipients=contacts(),sender=compose.getFromContact().emailAddress,subject=compose.getSubject();
      const fp=JSON.stringify([recipients,sender,subject]);if(fingerprint!==fp){requestId=crypto.randomUUID();fingerprint=fp;}
      const result=await rpc({action:'prepare',requestId,recipients,sender,subject});
-     if(result.skip){text.textContent=result.reason;return {body};}
-     trackId=result.id;inserted=true;
+     if(result.skip){outcome='Not tracked: '+result.reason;text.textContent=outcome;return {body};}
+     trackId=result.id;inserted=true;outcome='Pixel added; waiting for Gmail to confirm sending.';
      return {body:body+'<img src="'+result.pixelUrl+'" width="1" height="1" alt="" style="width:1px;height:1px;border:0" />'};
-    }catch(e){notification(e.message+' This email will be sent without tracking.');return {body};}
+    }catch(e){outcome='Not tracked: '+e.message;return {body};}
    });
    text.textContent='Track this email · domain exclusions apply';
   }
-  register().catch(()=>{checkbox.checked=false;checkbox.disabled=true;enabled=false;text.textContent='Tracking unavailable for this draft';});
-  compose.on('sent',()=>{if(inserted&&trackId)rpc({action:'sent',id:trackId}).then(r=>{if(r.queued)notification('Email sent. Tracking confirmation will retry automatically.');}).catch(()=>notification('Email sent, but tracking confirmation failed.'));});
+  register().catch(()=>{outcome='Not tracked: Gmail tracking hook could not be registered.';checkbox.checked=false;checkbox.disabled=true;enabled=false;text.textContent='Tracking unavailable for this draft';});
+  compose.on('sent',()=>{if(!inserted||!trackId){report(outcome);return;}rpc({action:'sent',id:trackId}).then(r=>{report(r.queued?'Email sent. Tracking confirmation is pending; retrying automatically.':r.skip?'Email sent; tracking skipped because recipients are now excluded.':'Email tracking registered. Image loads do not confirm who read it.');}).catch(()=>report('Email sent, but tracking confirmation failed.'));});
  });
 })().catch(e=>{globalThis.mailSignalStartup?.set('Startup failed: '+e.message);notification('Could not start: '+e.message);});
