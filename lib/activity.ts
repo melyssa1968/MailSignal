@@ -35,5 +35,5 @@ export function summarizeActivity(events:any[]) {
  // Multiple loads less than 30 seconds apart count as one activity session.
  const sessions:any[]=[];
  for(const e of usable)if(!sessions.length||e.received_at-sessions[sessions.length-1].received_at>=30000)sessions.push(e);
- return {loads:events.length,opens:sessions.length,uncertain:events.filter(e=>e.excluded).length,first_open:usable[0]?.received_at??null,last_open:usable[usable.length-1]?.received_at??null};
+ return {first_request:events[0]?.received_at??null,last_request:events[events.length-1]?.received_at??null,loads:events.length,opens:sessions.length,uncertain:events.filter(e=>e.excluded).length,first_open:usable[0]?.received_at??null,last_open:usable[usable.length-1]?.received_at??null};
 }
