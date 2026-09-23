@@ -20,7 +20,8 @@ export async function POST(r:Request){try{
   if(!publicReady())throw new ApiError(503,'The tracking endpoint is not active.');
   if(!Array.isArray(i.recipients)||i.recipients.some((x:unknown)=>typeof x!=='string'))throw new ApiError(400,'Recipient metadata is invalid.');
   // Never claim a particular recipient opened a message delivered to several people.
-  if(!i.recipients.length||i.recipients.length>100)throw new ApiError(400,'Enter 1–100 recipients.');
+  if(!i.recipients.length)throw new ApiError(400,'MailSignal could not read the recipients. Update the extension and expand the To/Cc fields before sending your next email.');
+  if(i.recipients.length>100)throw new ApiError(400,'Tracking supports up to 100 recipients per email.');
   let emails:string[];try{emails=recipientList(i.recipients.join(','));}catch{throw new ApiError(400,'The recipient address is invalid.');}
   const sender=typeof i.sender==='string'?i.sender.trim().toLowerCase():'';
   const eligible=emails.filter(e=>e!==sender&&!isExcluded(e,s.excludedDomains));

@@ -1,6 +1,6 @@
 # MailSignal — personal sales email tracking
 
-Source snapshot of the working MailSignal app, including Gmail extension **0.4.0**.
+Source snapshot of the working MailSignal app, including Gmail extension **0.4.1**.
 
 Live dashboard: https://mail-signal.melyssa-plunkett.chatgpt.site
 
@@ -65,3 +65,9 @@ No activity does not mean unread. Later screened image activity still does not e
 ## Request location and network
 
 Open an email’s Activity timeline to see approximate request location, network organization/ASN, and a Google proxy signature when detected. Missing metadata displays Unavailable; older records display Not collected. These fields never identify an email domain or employer. No reverse-DNS lookup, raw IP storage, precise coordinates, or external geolocation service is used. Collection uses only runtime Request.cf metadata, not caller-supplied forwarding/location headers. Extension 0.4.0 adds sender-view defenses; replace files in the existing installed folder and reload to preserve settings.
+
+## Reply recipient fix — 0.4.1
+
+The extension captures recipient, sender, and subject metadata at the InboxSDK `presending` event, before Gmail can clear a reply form. If recipient chips are unavailable, it reads only named To/Cc/Bcc inputs and recipient chips within the active compose, excluding the editable/quoted message body. A fresh snapshot is taken for every send attempt; cancellation and successful sending clear it. Empty recipient metadata skips tracking with a specific explanation while allowing Gmail to send. No body content is uploaded and domain exclusions still run on the complete recipient list at the server.
+
+Verification covers collapsed reply fields, reply-form teardown, CC/BCC, cancellation and retry, separate compose windows, opt-out, network failure, and empty metadata using a mocked Gmail SDK. Live Gmail confirmation requires updating the installed extension and sending a new reply. Replace files inside the existing installed folder, reload the extension, and refresh Gmail to retain the connection key and InboxSDK App ID.
