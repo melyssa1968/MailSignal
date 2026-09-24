@@ -1,6 +1,6 @@
 # MailSignal — personal sales email tracking
 
-Source snapshot of the working MailSignal app, including Gmail extension **0.4.1**.
+Source snapshot of the working MailSignal app, including Gmail extension **0.5.0**.
 
 Live dashboard: https://mail-signal.melyssa-plunkett.chatgpt.site
 
@@ -64,7 +64,13 @@ No activity does not mean unread. Later screened image activity still does not e
 
 ## Request location and network
 
-Open an email’s Activity timeline to see approximate request location, network organization/ASN, and a Google proxy signature when detected. Missing metadata displays Unavailable; older records display Not collected. These fields never identify an email domain or employer. No reverse-DNS lookup, raw IP storage, precise coordinates, or external geolocation service is used. Collection uses only runtime Request.cf metadata, not caller-supplied forwarding/location headers. Extension 0.4.0 adds sender-view defenses; replace files in the existing installed folder and reload to preserve settings.
+Open an email’s Activity timeline to see the request IP, approximate network location, time zone, network owner/ASN, source evidence, and available device/app signature. Cloudflare connection headers are used only behind this Site's dispatch; arbitrary forwarding/location headers are ignored. GeoJS receives only the requesting public IP and returns approximate location/network data, cached for 24 hours. Lookup runs after the pixel/redirect response and failure leaves the captured IP/country intact. The owner-authenticated `/api/source-check` checks the viewer's connection without creating an email event. No lookup can recover metadata absent from older events.
+
+Source labels distinguish Google image proxies, Apple relay prefixes, recognized security networks, other image proxies, hosting networks, generic clients and unverified clients. IP/network evidence does not identify the viewer, recipient domain or employer. Apple relay image loads and recognized security services are filtered; a relay browser link visit is evaluated separately. Hosting provider membership alone is not proof of a bot or VPN. Generic `Mozilla/5.0` requests are no longer promoted to engagement. The official Apple relay snapshot is refreshed with `python scripts/update-relay-ranges.py` and carries its retrieval date. It is evidence, not complete or permanent coverage. VPN detection remains unknown unless an identified relay or other source evidence applies.
+
+Extension 0.5.0 tracks up to 50 HTTP/HTTPS links per message. The server receives subject, recipient metadata and link URLs, never the email body. Link redirects use server-stored destinations, preserve queries/fragments, reject credentials/non-HTTP protocols, and continue to work when tracking is paused. Clicks are separate from image opens; HEAD requests are not counted. The extension reports its own Gmail link clicks as possible self-views, with the existing narrow correlation window. Forwarding an owned tracked link gets a fresh message-specific token. Multi-recipient and forwarded-copy identity remains unknown.
+
+After an extension update, existing Gmail contexts require a page refresh. 0.5.0 catches synchronous Chrome errors, disables stale controls, stops making stale RPC calls, and displays a persistent reconnect banner with an explicit refresh button. The update handler notifies already-open Gmail tabs. It does not force-refresh drafts or reinject duplicate SDK hooks. Replace files in the existing extension folder to preserve the key/App ID, reload the extension, then refresh Gmail.
 
 ## Reply recipient fix — 0.4.1
 

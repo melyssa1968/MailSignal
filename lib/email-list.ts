@@ -5,6 +5,8 @@ export type EmailListItem = {
   subject: string;
   status: string;
   opens: number;
+  clicks?:number;
+  clickRequests?:number;
   uncertain: number;
   loads: number;
   sent_at: number;
@@ -22,7 +24,7 @@ export function selectEmails<T extends EmailListItem>(rows: T[], options: {
   const query = options.search.trim().toLowerCase();
   return rows.filter(email =>
     (email.recipients.join(' ') + ' ' + email.subject + ' ' + senderKey(email)).toLowerCase().includes(query)
-    && (options.activity === 'all' || (options.activity === 'opened' ? email.opens > 0 : options.activity === 'uncertain' ? email.uncertain > 0 : email.loads === 0))
+    && (options.activity === 'all' || (options.activity === 'opened' ? (email.opens > 0 || (email.clicks||0)>0) : options.activity === 'uncertain' ? email.uncertain > 0 : email.loads === 0 && !(email.clickRequests||0)))
     && (options.sender === 'all' || senderKey(email) === options.sender)
     && (options.tracking === 'all' || email.status === options.tracking)
   ).sort((a, b) => {

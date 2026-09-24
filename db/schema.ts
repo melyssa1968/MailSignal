@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
 export const campaigns = sqliteTable('campaigns', {
  id: text('id').primaryKey(), owner: text('owner').notNull(), name: text('name').notNull(),
  subject: text('subject').notNull(), body: text('body').notNull(), status: text('status').notNull().default('active'),
@@ -10,7 +10,7 @@ export const messages = sqliteTable('messages', {
 }, t => [index('idx_messages_campaign').on(t.campaignId)]);
 export const events = sqliteTable('events', {
  id: text('id').primaryKey(), messageId: text('message_id').notNull().references(()=>messages.id),
- receivedAt: integer('received_at').notNull(), kind: text('kind').notNull(), sourceInfo: text('source_info'), ignoredAt: integer('ignored_at'),
+ receivedAt: integer('received_at').notNull(), kind: text('kind').notNull(), sourceInfo: text('source_info'), eventType:text('event_type').notNull().default('pixel'), linkId:text('link_id'), ignoredAt: integer('ignored_at'),
 }, t => [index('idx_events_message_time').on(t.messageId,t.receivedAt)]);
 export const senderViews=sqliteTable('sender_views',{
  id:text('id').primaryKey(), messageId:text('message_id').notNull().references(()=>messages.id), observedAt:integer('observed_at').notNull(),
@@ -19,3 +19,6 @@ export const preferences = sqliteTable('preferences', {
  owner: text('owner').primaryKey(), excludedDomains:text('excluded_domains').notNull().default('[]'),
  extensionKeyHash:text('extension_key_hash'), extensionSeenAt:integer('extension_seen_at'),
 },t=>[index('idx_preferences_extension_key').on(t.extensionKeyHash)]);
+
+export const sourceCache=sqliteTable('source_cache', {ip:text('ip').primaryKey(),value:text('value').notNull(),expiresAt:integer('expires_at').notNull()},t=>[index('idx_source_cache_expiry').on(t.expiresAt)]);
+export const trackedLinks=sqliteTable('tracked_links',{id:text('id').primaryKey(),messageId:text('message_id').notNull().references(()=>messages.id),url:text('url').notNull()},t=>[index('idx_tracked_links_message').on(t.messageId),uniqueIndex('idx_tracked_links_message_url').on(t.messageId,t.url)]);

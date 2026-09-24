@@ -36,6 +36,20 @@
       "when": 1789687575992,
       "tag": "0004_chief_may_parker",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1790244694264,
+      "tag": "0005_majestic_omega_flight",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1790245293926,
+      "tag": "0006_unique_darkstar",
+      "breakpoints": true
     }
   ]
 }

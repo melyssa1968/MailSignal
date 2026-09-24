@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `idx_tracked_links_message_url` ON `tracked_links` (`message_id`,`url`);

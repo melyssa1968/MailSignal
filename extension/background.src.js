@@ -16,11 +16,25 @@ chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
   if(msg.action==='config'){const {appId,key}=await chrome.storage.local.get(['appId','key']);return {appId,configured:!!(appId&&key)};}
   if(msg.action==='sent'&&typeof msg.id==='string'&&/^[a-f0-9-]{36}$/.test(msg.id))return confirm(msg.id);
   if(msg.action==='check')return call({action:'check'});
+  if(msg.action==='self_link')return call({action:'self_link',id:msg.id});
   if(msg.action==='self_view')return call({action:'self_view',ids:msg.ids});
-  if(msg.action==='prepare')return call({action:'prepare',requestId:msg.requestId,recipients:msg.recipients,sender:msg.sender,subject:msg.subject});
+  if(msg.action==='prepare')return call({action:'prepare',requestId:msg.requestId,recipients:msg.recipients,sender:msg.sender,subject:msg.subject,links:msg.links});
   throw new Error('Unknown request.');
  })().then(reply,e=>reply({error:e.message}));return true;
 });
 chrome.action.onClicked.addListener(()=>chrome.runtime.openOptionsPage());
 chrome.alarms.create('retry-confirmations',{periodInMinutes:1});
 chrome.alarms.onAlarm.addListener(async a=>{if(a.name!=='retry-confirmations')return;const all=await chrome.storage.local.get(null);for(const [k,v] of Object.entries(all)){if(!k.startsWith('pending:'))continue;if(Date.now()-v.at>86400000){await chrome.storage.local.remove(k);continue;}try{await call({action:'sent',id:v.id});await chrome.storage.local.remove(k);}catch{}}});
+
+// An extension reload invalidates existing Gmail scripts. Notify without replacing
+// Gmail's page or risking an unsaved draft; a full SDK reinjection can duplicate send hooks.
+chrome.runtime.onInstalled.addListener(async()=>{
+ const tabs=await chrome.tabs.query({url:'https://mail.google.com/*'});
+ for(const tab of tabs)if(tab.id)try{await chrome.scripting.executeScript({target:{tabId:tab.id},func:()=>{
+  if(document.getElementById('mailsignal-reconnect'))return;
+  const el=document.createElement('div');el.id='mailsignal-reconnect';el.setAttribute('role','alert');
+  Object.assign(el.style,{position:'fixed',top:'12px',right:'24px',zIndex:'2147483647',padding:'16px',maxWidth:'440px',background:'#fff4d6',color:'#382e17',border:'1px solid #ba8b20',borderRadius:'8px',font:'14px/1.6 Arial'});
+  el.textContent='MailSignal was updated. Wait for Gmail to save your draft, then refresh Gmail to reconnect tracking. ';
+  const button=document.createElement('button');button.textContent='Refresh Gmail';button.onclick=()=>location.reload();el.append(button);document.body.append(el);
+ }});}catch{/* The tab may have closed. */}
+});

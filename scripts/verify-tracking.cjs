@@ -4,11 +4,12 @@ const ts=require('typescript');const {DatabaseSync}=require('node:sqlite');const
 const sql=new DatabaseSync(':memory:');sql.exec('PRAGMA foreign_keys=ON');
 for(const file of fs.readdirSync('drizzle').filter(f=>f.endsWith('.sql')).sort())sql.exec(fs.readFileSync('drizzle/'+file,'utf8'));
 const DB={prepare(query){let args=[];return {bind(...a){args=a;return this;},async first(){return sql.prepare(query).get(...args)??null;},async all(){return {results:sql.prepare(query).all(...args)};},async run(){const r=sql.prepare(query).run(...args);return {meta:{changes:Number(r.changes)}};}};},async batch(statements){sql.exec('BEGIN');try{const out=[];for(const s of statements){try{out.push(await s.all());}catch(e){throw e;}}sql.exec('COMMIT');return out;}catch(e){sql.exec('ROLLBACK');throw e;}}};
+const backgroundTasks=[];let geoCalls=0,geoFails=false;async function geoFetch(url){geoCalls++;if(geoFails)throw new Error('Lookup down');const ip=decodeURIComponent(String(url).split('/').at(-1).replace(/\.json$/,''));return Response.json({ip,city:'Test Boston',region:'Massachusetts',country_code:'US',organization_name:'Fixture ISP',asn:12345,timezone:'America/New_York',accuracy:25});}
 let user={userId:'owner-a',email:'owner@example.com'};const env={DB,PIXEL_PUBLIC_READY:'true'};const cache={};
 function load(name){const file=path.resolve(name);if(cache[file])return cache[file].exports;const module={exports:{}};cache[file]=module;
- const compiled=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
- function req(id){if(id==='cloudflare:workers')return {env};if(id==='@/app/chatgpt-auth')return {getChatGPTUser:async()=>user};if(id.startsWith('@/'))return load(id.slice(2)+'.ts');if(id.startsWith('.'))return load(path.resolve(path.dirname(file),id)+'.ts');return require(id);}
- const wrapper=new vm.Script('(function(require,module,exports){'+compiled+'\n})',{filename:file}).runInNewContext({URL,Request,Response,Headers,Uint8Array,TextEncoder,Date,crypto:webcrypto,atob,console});wrapper(req,module,module.exports);return module.exports;
+ const compiled=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{esModuleInterop:true,module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+ function req(id){if(id==='next/server')return {after:fn=>{backgroundTasks.push(Promise.resolve().then(fn));}};if(id.endsWith('.json'))return require(path.resolve(path.dirname(file),id));if(id==='cloudflare:workers')return {env};if(id==='@/app/chatgpt-auth')return {getChatGPTUser:async()=>user};if(id.startsWith('@/'))return load(id.slice(2)+'.ts');if(id.startsWith('.'))return load(path.resolve(path.dirname(file),id)+'.ts');return require(id);}
+ const wrapper=new vm.Script('(function(require,module,exports){'+compiled+'\n})',{filename:file}).runInNewContext({fetch:geoFetch,AbortSignal,URL,Request,Response,Headers,Uint8Array,TextEncoder,Date,crypto:webcrypto,atob,console});wrapper(req,module,module.exports);return module.exports;
 }
 const origin='https://test.example.com';function request(route,body,method='POST',headers={}){return new Request(origin+route,{method,headers:{'content-type':'application/json',origin,...headers},...(body===undefined?{}:{body:JSON.stringify(body)})});}
 const ctx=id=>({params:Promise.resolve({id})});
@@ -80,6 +81,44 @@ const ctx=id=>({params:Promise.resolve({id})});
  classified=await activity.activityFor('owner-a');assert.ok(classified.some(e=>e.message_id===burst[0]&&e.category==='Possible self-view'));assert.ok(classified.some(e=>e.id==='later-0'&&!e.excluded));
  assert.equal(tracking.classifyRequest('Mozilla/5.0','prefetch'),'automated');assert.equal(tracking.classifyRequest('curl/8'),'automated');
  console.log('PASS: 119ms cross-message burst regression, screened counts, timeline agreement, duplicate sessions, reversible ignoring with owner isolation, and narrow sender-view correlation.');
+ // Source collection only trusts the known Cloudflare deployment, not client forwarding headers.
+ const sourceLib=load('lib/request-source.ts');
+ const edgeHeaders={'cf-connecting-ip':'8.8.8.8','cf-ipcountry':'US','cf-ray':'fixture-ray','x-dispatched-app':'site---6aa95fe7a9dc81919c4304607b822fd3','user-agent':'Mozilla/5.0 (Windows NT 10.0) Chrome/150.0'};
+ const edgeRequest=new Request('https://mail-signal.melyssa-plunkett.chatgpt.site/p/test',{headers:edgeHeaders});
+ const captured=sourceLib.requestSource(edgeRequest,'unverified');assert.equal(captured.ip,'8.8.8.8');assert.equal(captured.country,'US');
+ assert.equal(sourceLib.requestSource(new Request('https://untrusted.example/',{headers:edgeHeaders}),'unverified').ip,null);
+ assert.equal(sourceLib.requestSource(new Request(origin,{headers:{'x-forwarded-for':'8.8.8.8','cf-connecting-ip':'8.8.8.8','cf-ipcity':'Fake'}}),'unverified').ip,null);
+ for(const ip of ['127.0.0.1','10.0.0.1','169.254.169.254','::1','fc00::1','::ffff:127.0.0.1','2a06:98c0:3600::103','8.8.8.8, 1.1.1.1'])assert.equal(sourceLib.publicIp(ip),null);
+ assert.equal(sourceLib.publicIp('2001:4860:4860::8888'),'2001:4860:4860::8888');
+ assert.equal(sourceLib.canonicalIp('::ffff:8.8.8.8'),'8.8.8.8');
+ const ranges=JSON.parse(fs.readFileSync('lib/apple-relay-ranges.json'));const sample4=Number(ranges.v4[0][0]);const relayIp=[24,16,8,0].map(b=>(sample4>>>b)&255).join('.');
+ assert.equal(sourceLib.appleRelay(relayIp),true);assert.equal(sourceLib.appleRelay('8.8.8.8'),false);
+ const relaySource={...captured,ip:relayIp};assert.equal(sourceLib.sourceDescription(relaySource,'unverified').type,'privacy_relay');
+ assert.equal(sourceLib.sourceDescription({...captured,network:'Microsoft Corporation'},'unverified').type,'hosting_network');
+ assert.equal(sourceLib.sourceDescription({...captured,network:'Mimecast Services Limited'},'unverified').type,'security_scanner');
+ const enrichment=load('lib/source-enrichment.ts'),enriched=await enrichment.enrichSource(captured,'unverified');assert.equal(enriched.city,'Test Boston');assert.equal(enriched.accuracyKm,25);assert.equal(enriched.assessment.device,'Desktop');
+ const beforeGeo=geoCalls;await enrichment.enrichSource(captured,'unverified');assert.equal(geoCalls,beforeGeo,'Cached IP must not call provider again');
+ geoFails=true;const fallback=await enrichment.enrichSource({...captured,ip:'1.1.1.1'},'unverified');assert.equal(fallback.country,'US');assert.equal(fallback.geoStatus,'unavailable');geoFails=false;
+ const pixelRow=activity.describeActivity({kind:'unverified',source_info:JSON.stringify(relaySource),sent_at:0,received_at:60000,event_type:'pixel'},100000);assert.equal(pixelRow.excluded,true);
+ const clickRow=activity.describeActivity({kind:'unverified',source_info:JSON.stringify({...relaySource,fetchUser:'?1'}),sent_at:0,received_at:60000,event_type:'click'},100000);assert.equal(clickRow.excluded,false);
+ // Link preparation stores URLs only, reparents forwarded links, and cannot create an arbitrary redirect.
+ const withLinks=await (await prepare('links@outside.net',{links:['https://example.com/proposal?a=1&b=2','javascript:alert(1)','https://user:password@example.com/']})).json();
+ assert.equal(withLinks.links.length,1);const linkToken=new URL(withLinks.links[0].url).pathname.split('/').at(-1);
+ const linkRoute=load('app/l/[token]/route.ts'),linkCtx={params:Promise.resolve({token:linkToken})};
+ const eventCount=()=>sql.prepare('SELECT COUNT(*) n FROM events WHERE message_id=?').get(withLinks.id).n;
+ let redirect=await linkRoute.GET(new Request(withLinks.links[0].url,{headers:{'user-agent':'Mozilla/5.0 (Macintosh) Chrome/150.0','sec-fetch-user':'?1'}}),linkCtx);assert.equal(redirect.status,302);assert.equal(redirect.headers.get('location'),'https://example.com/proposal?a=1&b=2');assert.equal(eventCount(),0,'Unsent/draft link requests must not count');
+ await gmail.POST(request('/api/gmail',{action:'sent',id:withLinks.id},'POST',extensionAuth));
+ await linkRoute.HEAD(new Request(withLinks.links[0].url),linkCtx);assert.equal(eventCount(),0);
+ await linkRoute.GET(new Request(withLinks.links[0].url,{headers:{'user-agent':'Mozilla/5.0 (Macintosh) Chrome/150.0','sec-fetch-user':'?1'}}),linkCtx);assert.equal(eventCount(),1);
+ let clickEvent=sql.prepare('SELECT * FROM events WHERE message_id=?').get(withLinks.id);assert.equal(clickEvent.event_type,'click');
+ const summary=activity.summarizeActivity([activity.describeActivity({...clickEvent,sent_at:clickEvent.received_at-1000},Date.now()+10000)]);assert.equal(summary.loads,0);assert.equal(summary.clicks,1);assert.equal(summary.opens,0,'Clicks must never become inferred image opens');
+ const fwd=await (await prepare('forward@outside.net',{links:[withLinks.links[0].url]})).json();assert.notEqual(fwd.links[0].url,withLinks.links[0].url);
+ const fwdToken=new URL(fwd.links[0].url).pathname.split('/').at(-1);assert.equal(sql.prepare('SELECT url FROM tracked_links WHERE id=?').get(fwdToken).url,'https://example.com/proposal?a=1&b=2');
+ await detail.PATCH(request('/api/campaigns/'+sql.prepare('SELECT campaign_id FROM messages WHERE id=?').get(withLinks.id).campaign_id,{status:'paused'},'PATCH'),ctx(sql.prepare('SELECT campaign_id FROM messages WHERE id=?').get(withLinks.id).campaign_id));
+ assert.equal((await linkRoute.GET(new Request(withLinks.links[0].url),linkCtx)).status,302);assert.equal(eventCount(),1,'Pausing tracking preserves destinations without recording clicks');
+ assert.equal((await linkRoute.GET(new Request(origin+'/l/bad?url=https://evil.example'),{params:Promise.resolve({token:'bad'})})).status,404);
+ console.log('PASS: trusted IP capture, spoof rejection, IPv4/IPv6, private-IP rejection, Apple relay ranges, source classes, cached enrichment and outage fallback, separate clicks, safe redirects, unsent/HEAD/paused suppression, and forwarded-link identities.');
+ await Promise.all(backgroundTasks);
  await keyRoute.DELETE(request('/api/extension/key',{},'DELETE'));assert.equal((await prepare('someone@example.net')).status,401);
  console.log('PASS: individual Gmail preparation, multi-recipient eligibility and event classification, send confirmation, key revocation, ownership, exact/subdomain exclusions, and retroactive hiding/collection suppression.');
  console.log('PASS: real SQLite route integration checks cover ownership, CSRF, recipient validation, safe script encoding, duplicate-send claims, GIF response, unsent suppression, distinct opens, bot exclusion, pause, HEAD, and activation gate.');

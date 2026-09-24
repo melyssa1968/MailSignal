@@ -1,6 +1,30 @@
 import * as InboxSDK from '@inboxsdk/core';
 const ORIGIN='https://mail-signal.melyssa-plunkett.chatgpt.site';
-function rpc(payload){return chrome.runtime.sendMessage({type:'mailsignal',...payload}).then(r=>{if(r?.error)throw new Error(r.error);return r;});}
+let disconnected=false;
+const disconnectListeners=new Set();
+function markDisconnected(){
+ if(disconnected)return;disconnected=true;
+ globalThis.mailSignalStartup?.set('Refresh Gmail to reconnect MailSignal. Your draft stays in Gmail.');
+ for(const fn of disconnectListeners)fn();
+ const existing=document.getElementById?.('mailsignal-reconnect');if(existing)return;
+ const banner=document.createElement('div');banner.id='mailsignal-reconnect';banner.setAttribute('role','alert');
+ Object.assign(banner.style,{position:'fixed',top:'12px',right:'24px',zIndex:'2147483647',maxWidth:'440px',padding:'16px',background:'#fff4d6',color:'#382e17',border:'1px solid #ba8b20',borderRadius:'8px',font:'14px/1.6 Arial'});
+ const message=document.createElement('span');message.textContent='MailSignal needs to reconnect. Wait for Gmail to save your draft, then refresh this tab. New sends are not tracked until you refresh. ';
+ const button=document.createElement('button');button.textContent='Refresh Gmail';button.addEventListener('click',()=>location.reload());banner.append(message,button);document.body.append(banner);
+}
+function healthy(){try{return !!chrome.runtime.id;}catch{return false;}}
+async function rpc(payload){
+ try{if(disconnected||!healthy()){markDisconnected();throw new Error('Refresh Gmail to reconnect MailSignal.');}const r=await chrome.runtime.sendMessage({type:'mailsignal',...payload});if(r?.error)throw new Error(r.error);return r;}
+ catch(e){if(/context invalidated|extension.*invalid|receiving end does not exist/i.test(e.message)){markDisconnected();throw new Error('Refresh Gmail to reconnect MailSignal.');}throw e;}
+}
+if(typeof window!=='undefined'){
+ const check=()=>{if(!healthy())markDisconnected();};
+ window.addEventListener('focus',check);document.addEventListener('visibilitychange',check);
+ const healthTimer=setInterval(()=>{check();if(disconnected)clearInterval(healthTimer);},15000);
+}
+function outgoingLinks(html){const t=document.createElement('template');t.innerHTML=html;let bytes=0;return [...new Set([...t.content.querySelectorAll('a[href]')].map(a=>a.getAttribute('href')).filter(h=>/^https?:\/\//i.test(h||'')&&h.length<=4000))].filter(h=>{bytes+=h.length;return bytes<=30000;}).slice(0,50);}
+function trackLinks(html,links){if(!Array.isArray(links)||!links.length)return html;const map=new Map(links.map(l=>[l.original,l.url])),t=document.createElement('template');t.innerHTML=html;t.content.querySelectorAll('a[href]').forEach(a=>{const url=map.get(a.getAttribute('href'));if(url&&url.startsWith(ORIGIN+'/l/'))a.setAttribute('href',url);});return t.innerHTML;}
+
 function notification(message){const el=document.createElement('div');el.textContent='MailSignal: '+message;el.setAttribute('role','status');Object.assign(el.style,{position:'fixed',right:'24px',bottom:'24px',maxWidth:'350px',padding:'16px',background:'#183c2e',color:'white',zIndex:'2147483647',font:'14px/1.6 Arial',borderRadius:'10px',boxShadow:'0 4px 20px #0003'});document.body.append(el);setTimeout(()=>el.remove(),10000);}
 function stripOurPixels(html){const template=document.createElement('template');template.innerHTML=html;template.content.querySelectorAll('img').forEach(img=>{const raw=img.getAttribute('src')||'';try{const u=new URL(raw,ORIGIN);const original=u.hash.slice(1);if((u.origin===ORIGIN&&u.pathname.startsWith('/p/'))||original.startsWith(ORIGIN+'/p/'))img.remove();}catch{}});return template.innerHTML;}
 function recipientAddresses(compose){
@@ -51,13 +75,20 @@ function composeDetails(compose){
  let scanTimer;
  new MutationObserver(()=>{clearTimeout(scanTimer);scanTimer=setTimeout(scanViews,100);}).observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['src']});
  scanViews();
+ document.addEventListener('click',event=>{
+  let href=event.target?.closest?.('a[href]')?.getAttribute('href');if(!href)return;
+  try{let url=new URL(href,location.href);if(url.hostname==='www.google.com'&&url.pathname==='/url')url=new URL(url.searchParams.get('q')||url.searchParams.get('url')||'');
+   if(url.origin!==ORIGIN)return;const id=url.pathname.match(/^\/l\/([a-f0-9-]{36})$/)?.[1];if(id)rpc({action:'self_link',id}).catch(()=>{});
+  }catch{}
+ },true);
  sdk.Compose.registerComposeViewHandler(compose=>{
   globalThis.mailSignalStartup?.set('Compose detected; adding tracking control');
   let enabled=true,trackId=null,requestId=crypto.randomUUID(),fingerprint='',inserted=false,outcome='Tracking was not ready when this email was sent.';
   const report=message=>{globalThis.mailSignalStartup?.set(message);notification(message);rpc({action:'outcome',message}).catch(()=>{});};
   const bar=compose.addComposeNotice({orderHint:-100});const label=document.createElement('label');const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.checked=true;const text=document.createElement('span');text.textContent=' Track this email · connecting…';label.append(checkbox,text);Object.assign(label.style,{font:'14px Arial',display:'flex',gap:'8px',alignItems:'center',padding:'8px 12px',color:'#183c2e',background:'#eef7f0',border:'1px solid #bfd6c5',borderRadius:'6px',margin:'6px 0'});bar.el.append(label);globalThis.mailSignalStartup?.set('Tracking control created above the message');
   const visibilityTimer=setTimeout(()=>{if(compose.destroyed)return;const rect=checkbox.getBoundingClientRect();const visible=checkbox.isConnected&&rect.width>0&&rect.height>0&&getComputedStyle(checkbox).visibility!=='hidden';globalThis.mailSignalStartup?.set(visible?'Tracking checkbox is displayed above the message':'Compose found, but tracking control has no visible layout');},1000);
-  compose.on('destroy',()=>clearTimeout(visibilityTimer));
+  const disconnect=()=>{checkbox.checked=false;checkbox.disabled=true;enabled=false;text.textContent='Tracking disconnected · refresh Gmail';};disconnectListeners.add(disconnect);if(disconnected)disconnect();
+  compose.on('destroy',()=>{clearTimeout(visibilityTimer);disconnectListeners.delete(disconnect);});
   checkbox.addEventListener('change',()=>{enabled=checkbox.checked;text.textContent=enabled?'Track this email · domain exclusions apply':'Tracking off';});
   let sendDetails=null;
   // presending runs before Gmail clears/collapses a reply's recipient controls.
@@ -71,16 +102,16 @@ function composeDetails(compose){
     if(params.isPlainText){outcome='Not tracked: plain-text email.';return params;}
     // Modify only the outgoing send payload. Never load a pixel in a saved draft.
     const body=stripOurPixels(params.body);
-    if(!enabled){outcome='Not tracked: tracking was switched off.';return {body};}
+    if(!enabled){outcome=disconnected?'Email sent without tracking. Refresh Gmail to reconnect MailSignal.':'Not tracked: tracking was switched off.';return {body};}
     try{
      const {recipients,sender,subject}=sendDetails&&Date.now()-sendDetails.at<30000&&sendDetails.details.recipients.length?sendDetails.details:composeDetails(compose);
      if(!recipients.length)throw new Error('MailSignal could not read the reply recipients. Expand the To/Cc fields before sending your next email.');
      if(recipients.length>100)throw new Error('Tracking supports up to 100 recipients per email.');
-     const fp=JSON.stringify([recipients,sender,subject]);if(fingerprint!==fp){requestId=crypto.randomUUID();fingerprint=fp;}
-     const result=await rpc({action:'prepare',requestId,recipients,sender,subject});
+     const fp=JSON.stringify([recipients,sender,subject,outgoingLinks(body)]);if(fingerprint!==fp){requestId=crypto.randomUUID();fingerprint=fp;}
+     const result=await rpc({action:'prepare',requestId,recipients,sender,subject,links:outgoingLinks(body)});
      if(result.skip){outcome='Not tracked: '+result.reason;text.textContent=outcome;return {body};}
      trackId=result.id;inserted=true;outcome='Pixel added; waiting for Gmail to confirm sending.';
-     return {body:body+'<img src="'+result.pixelUrl+'" width="1" height="1" alt="" style="width:1px;height:1px;border:0" />'};
+     return {body:trackLinks(body,result.links)+'<img src="'+result.pixelUrl+'" width="1" height="1" alt="" style="width:1px;height:1px;border:0" />'};
     }catch(e){outcome='Not tracked: '+e.message;return {body};}
    });
    text.textContent='Track this email · domain exclusions apply';
