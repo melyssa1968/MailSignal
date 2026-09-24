@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MailSignal for Gmail",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Open signals for individual sales emails, with excluded recipient domains.",
   "minimum_chrome_version": "120",
   "permissions": [

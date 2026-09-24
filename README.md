@@ -1,6 +1,6 @@
 # MailSignal — personal sales email tracking
 
-Source snapshot of the working MailSignal app, including Gmail extension **0.5.0**.
+Source snapshot of the working MailSignal app, including Gmail extension **0.5.1**.
 
 Live dashboard: https://mail-signal.melyssa-plunkett.chatgpt.site
 
@@ -68,12 +68,16 @@ Open an email’s Activity timeline to see the request IP, approximate network l
 
 Source labels distinguish Google image proxies, Apple relay prefixes, recognized security networks, other image proxies, hosting networks, generic clients and unverified clients. IP/network evidence does not identify the viewer, recipient domain or employer. Apple relay image loads and recognized security services are filtered; a relay browser link visit is evaluated separately. Hosting provider membership alone is not proof of a bot or VPN. Generic `Mozilla/5.0` requests are no longer promoted to engagement. The official Apple relay snapshot is refreshed with `python scripts/update-relay-ranges.py` and carries its retrieval date. It is evidence, not complete or permanent coverage. VPN detection remains unknown unless an identified relay or other source evidence applies.
 
-Extension 0.5.0 tracks up to 50 HTTP/HTTPS links per message. The server receives subject, recipient metadata and link URLs, never the email body. Link redirects use server-stored destinations, preserve queries/fragments, reject credentials/non-HTTP protocols, and continue to work when tracking is paused. Clicks are separate from image opens; HEAD requests are not counted. The extension reports its own Gmail link clicks as possible self-views, with the existing narrow correlation window. Forwarding an owned tracked link gets a fresh message-specific token. Multi-recipient and forwarded-copy identity remains unknown.
+Extension 0.5.1 tracks up to 50 HTTP/HTTPS links per message. The server receives subject, recipient metadata and link URLs, never the email body. Link redirects use server-stored destinations, preserve queries/fragments, reject credentials/non-HTTP protocols, and continue to work when tracking is paused. Clicks are separate from image opens; HEAD requests are not counted. The extension reports its own Gmail link clicks as possible self-views, with the existing narrow correlation window. Forwarding an owned tracked link gets a fresh message-specific token. Multi-recipient and forwarded-copy identity remains unknown.
 
-After an extension update, existing Gmail contexts require a page refresh. 0.5.0 catches synchronous Chrome errors, disables stale controls, stops making stale RPC calls, and displays a persistent reconnect banner with an explicit refresh button. The update handler notifies already-open Gmail tabs. It does not force-refresh drafts or reinject duplicate SDK hooks. Replace files in the existing extension folder to preserve the key/App ID, reload the extension, then refresh Gmail.
+After an extension update, existing Gmail contexts require a page refresh. 0.5.1 catches synchronous Chrome errors, disables stale controls, stops making stale RPC calls, and displays a persistent reconnect banner with an explicit refresh button. The update handler notifies already-open Gmail tabs. It does not force-refresh drafts or reinject duplicate SDK hooks. Replace files in the existing extension folder to preserve the key/App ID, reload the extension, then refresh Gmail.
 
 ## Reply recipient fix — 0.4.1
 
 The extension captures recipient, sender, and subject metadata at the InboxSDK `presending` event, before Gmail can clear a reply form. If recipient chips are unavailable, it reads only named To/Cc/Bcc inputs and recipient chips within the active compose, excluding the editable/quoted message body. A fresh snapshot is taken for every send attempt; cancellation and successful sending clear it. Empty recipient metadata skips tracking with a specific explanation while allowing Gmail to send. No body content is uploaded and domain exclusions still run on the complete recipient list at the server.
 
 Verification covers collapsed reply fields, reply-form teardown, CC/BCC, cancellation and retry, separate compose windows, opt-out, network failure, and empty metadata using a mocked Gmail SDK. Live Gmail confirmation requires updating the installed extension and sending a new reply. Replace files inside the existing installed folder, reload the extension, and refresh Gmail to retain the connection key and InboxSDK App ID.
+
+### Extension 0.5.1 reconnect fix
+
+Disconnecting now destroys the InboxSDK instance and unregisters MailSignal observers, compose registration and interaction listeners. Invalidation is checked before interaction and handled during SDK startup too. A narrowly scoped startup handler converts only invalidated-context errors from this extension into the persistent reconnect notice; other errors remain visible. Chrome retains old Errors entries until cleared. After updating, refresh every Gmail tab (including other accounts), then clear the old entries and check the connection in the extension settings.

@@ -2,10 +2,11 @@ const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/st
 const sent=[],elements=[];let registerCompose;const viewId='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 const observedImages=[{getAttribute:()=>`https://ci3.googleusercontent.com/proxy/opaque#https://mail-signal.melyssa-plunkett.chatgpt.site/p/${viewId}.gif`}];
 function element(tag){let html='';const e={style:{},append(){},appendChild(){},setAttribute(){},remove(){},addEventListener(name,fn){this[name]=fn;},get innerHTML(){return html;},set innerHTML(v){html=v;},content:{querySelectorAll(){return [];}}};elements.push([tag,e]);return e;}
-const sdk={Compose:{registerComposeViewHandler(fn){registerCompose=fn;}}};let failPrepare=false;
+let sdkDestroyed=0,unregistered=0,observerDisconnected=0;
+const sdk={destroy(){sdkDestroyed++;},Compose:{registerComposeViewHandler(fn){registerCompose=fn;return ()=>unregistered++;}}};let failPrepare=false;
 const chrome={runtime:{id:'fixture-extension-id',async sendMessage(payload){sent.push(payload);if(payload.action==='config')return {configured:true,appId:'test-only-fixture'};if(payload.action==='prepare')return failPrepare?{error:'Network unavailable'}:{id:'test-message',pixelUrl:'https://mail-signal.melyssa-plunkett.chatgpt.site/p/test-message.gif'};return {confirmed:true};}}};
 const src=ts.transpileModule(fs.readFileSync(process.env.MAILSIGNAL_CONTENT_SOURCE||'extension/content.src.js','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
-new vm.Script('(function(require,exports){'+src+'})').runInNewContext({chrome,document:{addEventListener(){},createElement:element,body:element('body'),querySelectorAll:()=>observedImages},MutationObserver:class {observe(){}},clearTimeout:()=>{},Date,crypto:webcrypto,setTimeout:()=>0,URL,console})(()=>({load:async()=>sdk}),{});
+new vm.Script('(function(require,exports){'+src+'})').runInNewContext({chrome,document:{addEventListener(){},removeEventListener(){},createElement:element,body:element('body'),querySelectorAll:()=>observedImages},MutationObserver:class {observe(){} disconnect(){observerDisconnected++;}},clearTimeout:()=>{},Date,crypto:webcrypto,setTimeout:()=>0,URL,console})(()=>({load:async()=>sdk}),{});
 const flush=()=>new Promise(setImmediate),original='<p>Hello prospect</p>',lastPrepare=()=>sent.filter(p=>p.action==='prepare').at(-1);
 function field(value,{chip=false,body=false}={}){return {value:chip?'':value,getAttribute:name=>chip&&name==='data-hovercard-id'?value:null,closest:()=>body?{}:null};}
 async function composeFixture(){
@@ -55,7 +56,7 @@ async function composeFixture(){
  // Synchronous Chrome context invalidation is caught, sends still finish, and a persistent refresh notice appears.
  const stale=await composeFixture();chrome.runtime.sendMessage=()=>{throw new Error('Extension context invalidated.');};
  assert.equal((await stale.modifier({body:original,isPlainText:false})).body,original);stale.events.sent();await flush();
- assert.ok(elements.some(([tag,e])=>e.id==='mailsignal-reconnect'));assert.equal(stale.checkbox.disabled,true);
+ assert.ok(elements.some(([tag,e])=>e.id==='mailsignal-reconnect'));assert.equal(stale.checkbox.disabled,true);assert.equal(sdkDestroyed,1);assert.equal(unregistered,1);assert.equal(observerDisconnected,1);
  console.log('PASS: disconnected runtime fails safely, disables stale tracking controls and shows a persistent refresh notice.');
  console.log('PASS: new compose, reply-form teardown, collapsed reply fields, CC/BCC, deduplication, quoted-body exclusion, cancellation/retry, separate windows, opt-out, plain-text skip, no body upload, sent confirmation, and failure fallback (mocked Gmail SDK; not live Gmail).');
 })().catch(e=>{console.error(e);process.exitCode=1;});
