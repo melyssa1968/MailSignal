@@ -10,7 +10,8 @@
     reply({ stage, seconds: Math.floor((Date.now() - changedAt) / 1000), version: chrome.runtime.getManifest().version });
   });
   window.addEventListener('error', event => {
-    if (event.filename?.startsWith(chrome.runtime.getURL(''))) {
+    let extensionUrl;try{extensionUrl=chrome.runtime.getURL('');}catch{return;}
+    if (event.filename?.startsWith(extensionUrl)) {
       globalThis.mailSignalStartup.set('Extension error: ' + event.message);
     }
   });

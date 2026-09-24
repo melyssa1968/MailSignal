@@ -3,12 +3,18 @@ import { settingsFor } from '@/lib/preferences';
 import { isExcluded } from '@/lib/domains';
 import { eligibleRecipients } from '@/lib/signals';
 import { recipientList } from '@/lib/tracking';
+import { prepareLinks } from '@/lib/link-tracking';
 export async function POST(r:Request){try{
  const token=r.headers.get('authorization')?.replace(/^Bearer /,'');if(!token||token.length>200)throw new ApiError(401,'Connect the extension from MailSignal settings.');
  const account=await db().prepare('SELECT owner FROM preferences WHERE extension_key_hash=?').bind(await hashKey(token)).first<{owner:string}>();if(!account)throw new ApiError(401,'The extension key was revoked or replaced.');
  const uid=account.owner,i=await jsonInput(r),s=await settingsFor(uid);
  await db().prepare('UPDATE preferences SET extension_seen_at=? WHERE owner=?').bind(Date.now(),uid).run();
  if(i.action==='check')return json({...s,publicReady:publicReady()});
+ if(i.action==='self_link'){
+  const link=await db().prepare('SELECT l.message_id FROM tracked_links l JOIN messages m ON m.id=l.message_id JOIN campaigns c ON c.id=m.campaign_id WHERE l.id=? AND c.owner=? AND m.sent_at IS NOT NULL').bind(String(i.id),uid).first<{message_id:string}>();
+  if(link)await db().prepare('INSERT INTO sender_views(id,message_id,observed_at) VALUES(?,?,?)').bind(crypto.randomUUID(),link.message_id,Date.now()).run();
+  return json({ok:true});
+ }
  if(i.action==='self_view'){
   const ids=Array.isArray(i.ids)?[...new Set(i.ids)]:[];
   if(!ids.length||ids.length>50||ids.some(v=>typeof v!=='string'||!/^[a-f0-9-]{36}$/.test(v)))throw new ApiError(400,'Invalid view metadata.');
@@ -29,10 +35,10 @@ export async function POST(r:Request){try{
   const subject=String(i.subject??'').trim();if(subject.length>500||/[\r\n]/.test(subject))throw new ApiError(400,'Invalid email subject.');
   const draftId=String(i.requestId??'');if(!/^[a-f0-9-]{36}$/.test(draftId))throw new ApiError(400,'Invalid tracking request.');
   const existing=await db().prepare('SELECT m.id,m.email,m.recipients_json,c.subject FROM messages m JOIN campaigns c ON m.campaign_id=c.id WHERE c.id=? AND c.owner=? AND c.source=?').bind(draftId,uid,'gmail').first<any>();
-  if(existing){if(existing.recipients_json!==JSON.stringify(emails)||existing.subject!==subject)throw new ApiError(409,'Email details changed. Try sending again.');return json({id:existing.id,pixelUrl:new URL('/p/'+existing.id+'.gif',r.url).href});}
+  if(existing){if(existing.recipients_json!==JSON.stringify(emails)||existing.subject!==subject)throw new ApiError(409,'Email details changed. Try sending again.');return json({id:existing.id,pixelUrl:new URL('/p/'+existing.id+'.gif',r.url).href,links:await prepareLinks(existing.id,uid,i.links,r.url)});}
   const count=await db().prepare('SELECT COUNT(*) AS n FROM campaigns WHERE owner=? AND source=? AND created_at>?').bind(uid,'gmail',Date.now()-86400000).first<{n:number}>();if((count?.n??0)>=200)throw new ApiError(429,'Daily personal-email tracking limit reached. Turn tracking off to send normally.');
   const id=crypto.randomUUID();await db().batch([db().prepare('INSERT INTO campaigns(id,owner,name,subject,body,status,source,created_at) VALUES(?,?,?,?,?,?,?,?)').bind(draftId,uid,subject||'(No subject)',subject,'','active','gmail',Date.now()),db().prepare('INSERT INTO messages(id,campaign_id,email,recipients_json,sender) VALUES(?,?,?,?,?)').bind(id,draftId,eligible[0],JSON.stringify(emails),sender)]);
-  return json({id,pixelUrl:new URL('/p/'+id+'.gif',r.url).href},201);
+  return json({id,pixelUrl:new URL('/p/'+id+'.gif',r.url).href,links:await prepareLinks(id,uid,i.links,r.url)},201);
  }
  if(i.action==='sent'){
   const m=await db().prepare('SELECT m.id,m.email,m.recipients_json,m.sender,m.sent_at FROM messages m JOIN campaigns c ON c.id=m.campaign_id WHERE m.id=? AND c.owner=? AND c.source=?').bind(String(i.id),uid,'gmail').first<any>();if(!m)throw new ApiError(404,'Tracked email not found.');
